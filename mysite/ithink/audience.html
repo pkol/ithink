@@ -1,0 +1,169 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN">
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IThink - answer question</title>
+<link rel="stylesheet" href="/static/jquery-ui.css">
+<script src="/static/jquery-1.9.1.js"></script>
+<script src="/static/jquery-ui.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+#draggable { width: 150px; padding: 0.5em; }
+#aadraggable { width: 150px; height: 15px; padding: 0.5em; }
+
+.overlay {
+    position: fixed;
+    top: 0%;
+    left: 0%;
+    width: 100%;
+    height: 100%;
+    background-color: #101010;
+    color: #ff0000;
+    filter:alpha(opacity=95);
+    -moz-opacity:0.95;
+    -khtml-opacity: 0.95;
+    opacity: 0.95;
+    z-index: 10000;
+    display:none;
+}
+
+.dynamic{
+    display:none;
+}
+
+</style>
+<script>
+
+
+$(function() {
+		$("#error").hide();
+		$("#qa").hide();
+		$("#notstarted").hide();
+		$("#end").hide();
+
+		getData(true);
+
+		});
+
+function getData(wait)
+{
+		$.ajax({
+			url: '/ithink/{{play.id}}/audienceGetData/',
+			cache: false,
+			error : function(xhdr, txt, res){
+				$("#error").show();
+	console.log("getData NET ERROR");
+				setTimeout(function(){getData(wait);}, 1000);
+			},
+			success: function( data ) {
+			 if (data['state']==1){
+			 	$("#notstarted").show();
+			 	$("#qa").hide();
+				$("#end").hide();
+			 }
+			 if (data['state']==2){
+			 	$("#notstarted").hide();
+				$("#end").hide();
+			 	$("#question").html(data['question']);
+				$("#q").attr("value", data['question_id']);
+			 	$("#qa").show();
+//			 	$("#q").focus();
+			 }
+			 if(data['state']==3){
+			 	$("#notstarted").hide();
+			 	$("#qa").hide();
+				$("#end").show();
+			 	
+			 }
+			 $("#error").hide();
+
+			 last_event = data['last_event'];
+			 if(wait){
+				waitForEvent();
+				}
+			},
+
+			complete : function(xhdr, txt){
+			}
+
+			});
+
+
+}
+
+
+function waitForEvent(){
+	$.ajax({
+		url: '/ithink/waitForEvent/'+last_event +'/',
+		success: processEvents,
+		cache: false,
+		error: netError 
+		})
+}
+
+function netError(a,b,c){
+	$("#error").show();
+	console.log("NET ERROR",a,b,c);
+	setTimeout(function() {getData(true);}, 1000);
+}
+
+function processEvents(data){
+
+ 	$("#error").hide();
+	
+	for (i in data){
+		var ev = data[i]
+		if(ev['id'] > last_event)
+			last_event = ev['id'];
+		var t = ev['data']['type']
+		if( t =='playStart'){
+			getData();
+		}
+		if( t =='playQuestion'){
+			getData();
+		}
+		if( t =='playEnd' || t == 'playPause' || t == 'playResume'){
+			getData();
+		}
+	}
+	waitForEvent();
+}
+
+
+</script>
+</head>
+<body>
+
+<div style="margin-top:10em;"></div>
+
+<div id="notstarted" class="dynamic">
+<h1>Awaiting for start of the brain storm... </h1>
+</div>
+
+
+<div id="qa" class="dynamic" >
+<h1 id="question"></h1>
+
+Answers:
+<div id="answer">
+<form id="qform" action={% url 'ithink:audience' play.id%} method="post">
+{% csrf_token %}
+<textarea  name="answer" rows="5" width="100%"/></textarea><p/>
+<input id="q" type="hidden" name="question"/>
+<input type="submit" value="Send">
+</form>
+
+</div>
+</div>
+
+<div id="end" class="dynamic"  >
+<h1>Waiting for next question...</h1>
+</div>
+
+<div id="error" class="overlay">
+  <h1>Connection error.</h1>
+  Please check your internet connection.
+</div>
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+<h1>Question: {{question.question}}</h1>
+
+Your answer:
+<form action={% url 'ithink:submit' play.id%} method="post">
+{% csrf_token %}
+<input type="text" name="answer"/><p/>
+<input type="hidden" name="question" value="{{ question.id }}"/>
+<input type="submit" value="Send">
+</form>
+
