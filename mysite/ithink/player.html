@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IThink Answers</title>
+<link rel="stylesheet" href="/static/jquery-ui.css">
+<script src="/static/jquery-1.9.1.js"></script>
+<script src="/static/jquery-ui.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.ui-widget-content { width: 15em;  padding: 0.5em; }
+.overlay {
+    position: fixed;
+    top: 0%;
+    left: 10%;
+    width: 90%;
+    height: 10%;
+    background-color: #101010;
+    color: #ff0000;
+    filter:alpha(opacity=80);
+    -moz-opacity:0.80;
+    -khtml-opacity: 0.80;
+    opacity: 0.80;
+    z-index: 10000;
+    display:none;
+}
+
+.aaamain{
+	top: 100px;
+  }
+
+.aatoolbar{
+  position: fixed;
+  }
+
+.dynamic{
+    display:none;
+}
+
+
+</style>
+<script>
+
+
+$(function() {
+		answersCnt = 0;
+		$("#qa").hide();
+		$("#notstarted").hide();
+	 	$("#end").hide();
+		getData(true);
+		
+		$("#start").click(function(){
+		$.ajax({
+			url: '/ithink/{{play.id}}/playerStart/',
+			cache: false
+		});
+		});
+		$("#nextQuestion").click(function(){
+		$.ajax({
+			url: '/ithink/{{play.id}}/playerNext/',
+			data: {"dir":"next"},
+			cache: false
+		});
+		});
+		$("#prevQuestion").click(function(){
+		$.ajax({
+			url: '/ithink/{{play.id}}/playerNext/',
+			cache: false,
+			data: {"dir":"prev"}
+		});
+		});
+
+		$("#active").change(function(){
+			var action="";
+			if ($("#active").is(':checked'))
+				action = "resume";
+			else
+				action ="pause";
+			
+			$.ajax({
+				url: '/ithink/playerAction/',
+				cache: false,
+				data: {"action":action, "play_id": {{play.id}} }
+			});
+		});
+
+
+
+		$("#newQuestion").keyup(function(e){
+			if(e.keyCode == 13){
+				$.ajax({
+					url:'/ithink/playerAction/',
+					cache: false,
+					data: {"action":"newQuestion", "play_id": {{play.id}},
+						"question": $("#newQuestion").val()}
+				});
+			}
+		});
+
+		$("#newLabel").keyup(function(e){
+			if(e.keyCode == 13){
+				$.ajax({
+					url:'/ithink/playerAction/',
+					cache: false,
+					data: {"action":"newLabel", "question_id": question_id,
+						"labelTxt": $("#newLabel").val()}
+				});
+			}
+		});
+
+
+			
+
+
+
+
+		});
+
+function getData(wait)
+{
+
+	$("#notstarted").hide();
+	$.ajax({
+		url: '/ithink/{{play.id}}/playerGetData',
+		cache: false,
+		error : function(xhdr, txt, res){
+			$("#error").show();
+			setTimeout(function(){getData(wait);}, 1000);
+		},
+		success: function( data ) {
+		 if (data['state']==1){
+			$("#qa").hide();
+		 	$("#notstarted").show();
+		 	$("#end").hide();
+		 }
+		 if (data['state']==2|| data['state'] == 3){
+		 	$("#question").html(data['question'])
+		 	$("#notstarted").hide();
+		 	$("#qa").show();
+		 	$("#end").hide();
+			question_id = data['question_id'];
+			addAnswers(data['answers']);
+
+		 }
+		 $("#active").prop('checked', data['state'] == 2);
+		 $("#error").hide();
+
+		if(wait){
+			last_event = data['last_event'];
+			waitForEvent();
+		}
+		
+		}
+
+	});
+
+}
+
+function stopDrag(evet, ui){
+//	alert(ui.helper.data("id"));
+	var aa =  ui.helper; 
+	$.ajax({
+		'url': '/ithink/playerAction/',
+		'data' : {'action':'setPos', 'answerId': aa.data("id"),
+			//'posx': ui.offset.left -  $("#answers").offset().left,
+			//'posy': ui.offset.top - $("#answers").offset().top,
+
+			'posx': ui.position.left,
+			'posy': ui.position.top,
+			}
+			});
+}
+
+function addAnswers(answers){
+	for (a in answers){
+		var aa = answers[a]
+		if(aa['attrs'].length)
+			attrs = JSON.parse(aa['attrs']);
+		else
+			attrs ={};
+		d = $("<div id='draggable'  class='ui-widget-content'>" + aa.txt + "</div>");
+		if(attrs['type'] == "label"){
+			d.css("background-color", "lightblue");
+		}else{
+			if(answersCnt++ % 2)
+				d = d.css("color","green")
+			d.css("background-color", "#e0e0e0");
+		}
+		if(aa.posx>=0) { 
+		  d = d.css({'left': aa.posx});
+		  d = d.css({'top': aa.posy});
+		}
+
+		d.data("id", aa.id);
+		d.attr("id","ans_"+aa.id);
+		$("#answers").append(d);
+		d.draggable({
+			stop: stopDrag,
+		});
+		if(aa.posx<0 && attrs['type']=="label"){
+			e= $("#ans_"+aa.id);
+			console.log("zerowanie", e);
+			e.css({'top': -e.offset().top + 50});
+		}
+
+
+
+
+	}
+
+	//scroll to bottom
+	$('html, body').animate({ 
+	   scrollTop: $(document).height()-$(window).height()}, 
+	      500, 
+	         "easeOutQuint"
+		 );
+
+}
+
+function waitForEvent(){
+
+	waitStarted = 1;
+	$.ajax({
+		url: '/ithink/waitForEvent/'+last_event +'/',
+		cache: false,
+		success: processEvents,
+		error: netError 
+		})
+}
+
+function netError(a,b,c){
+	$("#error").show();
+	setTimeout(waitForEvent, 1000);
+}
+
+
+
+function processEvents(data){
+
+	$("#error").hide();
+	for (i in data){
+		ev = data[i];
+
+		if(ev['id'] > last_event)
+			last_event = ev['id'];
+		if(ev['data']['play_id'] != {{play.id}})
+			continue;
+		if(ev['data']['type']=='answer'){
+			addAnswers([ev['data']['answer']]);
+		}
+
+		if(ev['data']['type']=='playStart'){
+			getData();
+		}
+		if(ev['data']['type']=='playQuestion'){
+			$("#answers").html("");
+			getData();
+		}
+		if(ev['data']['type']=='playEnd'){
+			getData();
+		}
+		
+	}
+	waitForEvent();
+}
+
+
+</script>
+</head>
+<body>
+
+<div id="notstarted" class="dynamic">
+<h1>Join brain strom at url /{{play.id}}/answer </h1>
+<img src="/ithink/{{play.id}}/playerQR" height="50%" width="50%"/>
+<button id="start">Start it!</button>
+</div>
+
+
+<div id="qa" class="dynamic">
+<div class="toolbar">
+  <button id="prevQuestion">&lt;&lt;Previous Question</button>
+  <button id="nextQuestion">Next Question &gt;&gt;</button>
+  | new question: <input type="textbox" id="newQuestion"/>
+  | new label: <input type="textbox" id="newLabel"/>
+  <br>
+<hr></hr>
+<h1 id="question"></h1>
+</div>
+
+<div id="answers" class="main">
+</div>
+
+<div class="toolbar">
+<hr/>
+  <input type="checkbox" id="active">accept answers</input>
+</div>
+
+</div>
+
+<div id="end" class="dynamic">
+<h1>Session ended. Thank you</h1>
+</div>
+
+<div id="error" class="overlay">
+ <div class="ui-widget">
+  Connection error. Please check your internet connection.
+ </div>
+</div>
+
+
+
+</body>
+</html>
